@@ -3,7 +3,13 @@ project(MyAwesomeComponents VERSION 1.0)
 
 # SOFA packages containing our dependencies
 find_package(SofaFramework REQUIRED) # Needed to use SofaCore, SofaHelper and SofaDefaultType
-
+find_package(SofaUserInteraction REQUIRED) # Needed to use Topological Modifier
+find_package(SofaBaseMechanics REQUIRED)
+find_package(SofaDeformable REQUIRED)
+find_package(SofaBoundaryCondition REQUIRED)
+find_package(SofaGeneralTopology REQUIRED)
+find_package(SofaMiscTopology REQUIRED)
+find_package(SofaMiscFem REQUIRED)
 
 # Config files (tell SOFA this is a plugin)
 set(CONFIG_FILES
@@ -15,10 +21,13 @@ set(HEADER_FILES
     src/MyAwesomeComponents/ExplicitBDFSolver.h
     src/MyAwesomeComponents/FanForceField.h
     src/MyAwesomeComponents/FanForceField.inl
+    src/MyAwesomeComponents/TearingComponent.h
+    src/MyAwesomeComponents/TearingComponent.inl
     )
 set(SOURCE_FILES
     src/MyAwesomeComponents/ExplicitBDFSolver.cpp
     src/MyAwesomeComponents/FanForceField.cpp
+    src/MyAwesomeComponents/TearingComponent.cpp
     )
 
 # SOFA plugin are basically libraries
@@ -30,6 +39,13 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     SofaHelper
     SofaDefaultType
     SofaSimulationCore
+    SofaUserInteraction
+    SofaBaseMechanics
+    SofaDeformable
+    SofaBoundaryCondition
+    SofaGeneralTopology
+    SofaMiscTopology
+    SofaMiscFem
     )
 
 # nested-namespace-definition requires compiler flag '/std:c++17'

@@ -20,6 +20,7 @@
 * Contact information: contact@sofa-framework.org                             *
 ******************************************************************************/
 #include <MyAwesomeComponents/config.h>
+#include <sofa/core/ObjectFactory.h>
 
 namespace sofa
 {
@@ -65,8 +66,9 @@ const char* getModuleDescription()
 MYAWESOMECOMPONENTS_API
 const char* getModuleComponentList()
 {
-    // string containing the names of the classes provided by the plugin
-    return "FanForceField";
+    /// string containing the names of the classes provided by the plugin
+    static std::string classes = sofa::core::ObjectFactory::getInstance()->listClassesFromTarget(sofa_tostring(SOFA_TARGET));
+    return classes.c_str();
 }
 
 } // extern "C"
