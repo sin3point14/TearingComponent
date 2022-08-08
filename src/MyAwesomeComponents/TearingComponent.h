@@ -52,6 +52,9 @@ namespace sofa::component::controller
 
 		/// Impl method that will compute the intersection and check if some element have to be removed.
 		// void doTear();
+		Coord m_maxPrincipalStressDir;
+		Real m_maxPrincipalStress;
+		Size m_maxPrincipalStressIdx;
 
 	protected:
 
@@ -70,6 +73,7 @@ namespace sofa::component::controller
 
 	public:
     	void addForce(const core::MechanicalParams* mparams, DataVecDeriv& f, const DataVecCoord& x, const DataVecDeriv& v) override;
+		void draw(const core::visual::VisualParams* vparams) override;
 
 		// Data<Real> d_yieldStress;
 		// sofa::component::forcefield::TriangularFEMForceField<DataTypes>* m_triangleFEMForceField;
