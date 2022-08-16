@@ -10,6 +10,8 @@ find_package(SofaBoundaryCondition REQUIRED)
 find_package(SofaGeneralTopology REQUIRED)
 find_package(SofaMiscTopology REQUIRED)
 find_package(SofaMiscFem REQUIRED)
+find_package(SofaUserInteraction REQUIRED)
+
 
 # Config files (tell SOFA this is a plugin)
 set(CONFIG_FILES
@@ -46,6 +48,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     SofaGeneralTopology
     SofaMiscTopology
     SofaMiscFem
+    SofaUserInteraction
     )
 
 # nested-namespace-definition requires compiler flag '/std:c++17'

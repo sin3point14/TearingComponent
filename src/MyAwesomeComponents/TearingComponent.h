@@ -6,6 +6,7 @@
 #include <SofaMiscFem/TriangularFEMForceField.h>
 #include <SofaBaseTopology/TriangleSetTopologyModifier.h>
 #include <SofaBaseTopology/TriangleSetGeometryAlgorithms.h>
+#include <SofaUserInteraction/TopologicalChangeManager.h>
 
 #include <fstream>
 
@@ -31,6 +32,7 @@ namespace sofa::component::controller
     typedef typename DataTypes::Coord    Coord   ;
     typedef typename DataTypes::Deriv    Deriv   ;
     typedef typename Coord::value_type   Real    ;
+	typedef typename sofa::defaulttype::Vec3Types Vec3types;
 
     typedef core::objectmodel::Data<VecCoord> DataVecCoord;
     typedef core::objectmodel::Data<VecDeriv> DataVecDeriv;
@@ -62,6 +64,10 @@ namespace sofa::component::controller
 		// std::vector<core::CollisionModel*> m_surfaceCollisionModels;
 		sofa::component::topology::TriangleSetTopologyModifier* m_triangleMod;
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
+		sofa::core::CollisionModel* m_body;
+
+		sofa::component::collision::TopologicalChangeManager topologyChangeManager;
+
 
 
 		/// Default constructor

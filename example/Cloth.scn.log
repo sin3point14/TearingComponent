@@ -23,3 +23,18 @@
 /SquareGravity/GeomAlgo.showPointIndices = 1
 /SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
 /SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+
+--- NEW SESSION: 16/08/2022 09:16:56 ---
+/SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
+/SquareGravity/GeomAlgo.showTriangleIndices = 1
+/SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+
+--- NEW SESSION: 16/08/2022 09:17:49 ---
+/SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+/SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
+/SquareGravity/GeomAlgo.showTriangleIndices = 1
+
+--- NEW SESSION: 17/08/2022 00:32:20 ---
+/SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
+/SquareGravity/GeomAlgo.showTriangleIndices = 1
+/SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
