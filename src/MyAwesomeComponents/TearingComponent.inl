@@ -249,6 +249,7 @@ namespace sofa::component::controller
 		this->m_topology->getContext()->get(m_body);
 
 
+
 		if (m_triangleMod == nullptr || m_triangleGeo == nullptr || m_body == nullptr)
 		{
 			msg_error() << "No TriangleSetTopologyModifier, TriangleSetGeometryAlgorithms or Collision model not found";

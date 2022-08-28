@@ -38,3 +38,16 @@
 /SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
 /SquareGravity/GeomAlgo.showTriangleIndices = 1
 /SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+
+--- NEW SESSION: 23/08/2022 09:55:28 ---
+/SquareGravity/constantFF1.showColor = 0.2 0.898039 0.298039 1
+
+--- NEW SESSION: 29/08/2022 01:24:44 ---
+/Sphere.time = 43.15
+/Sphere/tSphereModel46.color = 1 0.498039 0 1
+/Sphere/obstacle_particle.position = 0 10 0
+/Sphere/obstacle_particle.showColor = 1 1 1 1
+
+--- NEW SESSION: 29/08/2022 01:26:46 ---
+/Sphere/tSphereModel46.color = 1 0.498039 0 1
+/Sphere/obstacle_particle.showColor = 1 1 1 1

@@ -64,9 +64,10 @@ namespace sofa::component::controller
 		// std::vector<core::CollisionModel*> m_surfaceCollisionModels;
 		sofa::component::topology::TriangleSetTopologyModifier* m_triangleMod;
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
-		sofa::core::CollisionModel* m_body;
+		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_body;
 
 		sofa::component::collision::TopologicalChangeManager topologyChangeManager;
+		//sofa::component::collision::TriangleCollisionModel m_triangleCollisionModel;
 
 
 
