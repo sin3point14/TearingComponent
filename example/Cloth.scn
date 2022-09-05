@@ -36,7 +36,7 @@
         <TearingComponent name="FEM" youngModulus="60" poissonRatio="0.3" method="large" />
         <!-- <ConstantForceField indices="621" force="-800 -800 0" showArrowSize="0.1"/> -->
         <!-- <ConstantForceField indices="1360" force="800 -800 0"  showArrowSize="0.1"/> -->
-        <!-- <ConstantForceField force="0 0 10"/> -->
+        <ConstantForceField force="0 0 10"/>
         <Node >
             <OglModel name="Visual" texcoords="@../meshLoader.texcoords" texturename="textures/colorMap.png" />
             <IdentityMapping input="@.." output="@Visual" />
@@ -54,7 +54,7 @@
 		<SphereCollisionModel name="Floor" radius="1" simulated="1" moving="1" contactStiffness="100" />
 	</Node> -->
 
-    <Node name="Sphere">
+    <!-- <Node name="Sphere">
         <EulerImplicitSolver rayleighStiffness="0"/>
         <CGLinearSolver iterations="200" tolerance="1e-06" threshold="1e-06"/>
         <MechanicalObject template="Rigid3d" name="myParticle" position="50 50 40    0 0 0 1" showObject="1" showObjectScale="0.5" />
@@ -63,5 +63,5 @@
         <UniformMass totalMass="1" />
         <ConstantForceField force="0 0 -5 0 0 0" />
         <SphereCollisionModel name="Floor" radius="1" simulated="1" moving="1" contactStiffness="100" />
-    </Node>
+    </Node> -->
 </Node>

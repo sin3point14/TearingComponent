@@ -160,8 +160,103 @@ namespace sofa::component::controller
 			//errorTrianglesIndices.push_back(ind_ta);
 			//errorTrianglesIndices.push_back(ind_tb);
 
-			topologyChangeManager.incisionCollisionModel(m_body, ind_a, a, m_body, ind_b, b, 50);
+			core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(ind_a);
 
+			//for (auto&& t : m_triangleCon->getElementAroundElement(ind_a)) {
+			//	for (auto&& e_id : m_triangleCon->m_triangleCom->getEdgesInTriangle(t)) {
+			//		if (std::find(edges.begin(), edges.end(), e_id) == edges.end()) {
+			//			BaseMeshTopology::Edge e = m_triangleCon->getEdge(e_id);
+
+			//		}
+			//	}
+			//}
+			const typename DataTypes::VecCoord& vect_c = m_triangleGeo->getDOF()->read(core::ConstVecCoordId::position())->getValue();
+			// ax + by + cz - d = 0
+			const float plane_a = 0;
+			const float plane_b = 1;
+			const float plane_c = 0;
+			//const float plane_a = m_maxPrincipalStressDir[0];
+			//const float plane_b = m_maxPrincipalStressDir[1];
+			//const float plane_c = m_maxPrincipalStressDir[2];
+			const float plane_d = -plane_a * a[0] - plane_b * a[1] - plane_c * a[2];
+			const auto plane_eqn = [&](Coord p) {
+				return plane_a * p[0] + plane_b * p[1] + plane_c * p[2] + plane_d;
+			};
+
+			core::topology::BaseMeshTopology::TriangleID next_tri = -1;
+			float next_dist = -1;
+			while (next_dist < 5.0f) {
+				core::topology::BaseMeshTopology::TriangleID prevNext = next_tri;
+				for (auto&& t_id : m_triangleCon->getElementAroundElement(ind_a)) {
+					core::topology::BaseMeshTopology::PointID toBeCut1, toBeCut2;
+					auto& t = m_triangleCon->getTriangle(t_id);
+					Coord p1 = vect_c[t[0]];
+					Coord p2 = vect_c[t[1]];
+					Coord p3 = vect_c[t[2]];
+					float dist1 = (a - p1).norm2();
+					float dist2 = (a - p2).norm2();
+					float dist3 = (a - p3).norm2();
+
+					bool pos1 = plane_eqn(p1) > 0.0f;
+					bool pos2 = plane_eqn(p2) > 0.0f;
+					bool pos3 = plane_eqn(p3) > 0.0f;
+					if ((pos1 && pos2 && pos3) || (!pos1 && !pos2 && !pos3))
+						continue;
+					if (pos1 == pos2) {
+						toBeCut1 = t[2];
+						if (dist1 > dist2) {
+							toBeCut2 = t[0];
+						}
+						else {
+							toBeCut2 = t[1];
+						}
+					}
+					else if (pos2 == pos3) {
+						toBeCut1 = t[0];
+						if (dist2 > dist3) {
+							toBeCut2 = t[1];
+						}
+						else {
+							toBeCut2 = t[2];
+						}
+					}
+					else {
+						toBeCut1 = t[1];
+						if (dist3 > dist1) {
+							toBeCut2 = t[2];
+						}
+						else {
+							toBeCut2 = t[0];
+						}
+					}
+					core::topology::BaseMeshTopology::EdgeID cutEdge = m_triangleCon->getEdgeIndex(toBeCut1, toBeCut2);
+					core::topology::BaseMeshTopology::TrianglesAroundEdge tris = m_triangleCon->getTrianglesAroundEdge(cutEdge);
+					auto other = tris[0] == t_id ? tris[1] : tris[0];
+					Coord otherCoord[3];
+					triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
+					sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
+					float distCentroid = (a - otherCentroid).norm();
+					if (distCentroid > next_dist) {
+						next_dist = distCentroid;
+						next_tri = other;
+					}
+				}
+				if (prevNext == next_tri)
+					break;
+			}
+
+			//while (True) {
+
+			//}
+			if (next_tri != -1) {
+				sofa::type::Vec3 nextCentroid;
+				Coord nextPoints[3];
+				triangleGeo->getTriangleVertexCoordinates(next_tri, nextPoints);
+
+				nextCentroid = (nextPoints[0] + nextPoints[1] + nextPoints[2]) / 3.0;
+
+				topologyChangeManager.incisionCollisionModel(m_body, ind_a, a, m_body, next_tri, nextCentroid, 50);
+			}
 			//bool isPathOk = triangleGeo->computeIntersectedObjectsList(sofa::InvalidID, a, b, ind_a, ind_b, topoPath_list, indices_list, coords2_list);
 
 			//if (!isPathOk)
@@ -243,6 +338,8 @@ namespace sofa::component::controller
 		// m_triangleFEMForceField = getContext()->get<sofa::component::forcefield::TriangularFEMForceField<DataTypes>>();
 		// sofa::component::topology::TriangleSetTopologyModifier* triangleMod;
 		this->m_topology->getContext()->get(m_triangleMod);
+		this->m_topology->getContext()->get(m_triangleCon);
+
 
 		// sofa::component::topology::TriangleSetGeometryAlgorithms<Vec3Types>* triangleGeo;
 		this->m_topology->getContext()->get(m_triangleGeo);
@@ -250,7 +347,7 @@ namespace sofa::component::controller
 
 
 
-		if (m_triangleMod == nullptr || m_triangleGeo == nullptr || m_body == nullptr)
+		if (m_triangleMod == nullptr || m_triangleGeo == nullptr || m_body == nullptr || m_triangleCon == nullptr)
 		{
 			msg_error() << "No TriangleSetTopologyModifier, TriangleSetGeometryAlgorithms or Collision model not found";
 			sofa::core::objectmodel::BaseObject::d_componentState.setValue(sofa::core::objectmodel::ComponentState::Invalid);
