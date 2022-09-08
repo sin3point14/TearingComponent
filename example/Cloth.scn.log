@@ -51,3 +51,14 @@
 --- NEW SESSION: 29/08/2022 01:26:46 ---
 /Sphere/tSphereModel46.color = 1 0.498039 0 1
 /Sphere/obstacle_particle.showColor = 1 1 1 1
+
+--- NEW SESSION: 09/09/2022 01:56:38 ---
+/SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1
+/SquareGravity/GeomAlgo.showTriangleIndices = 1
+/SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+
+--- NEW SESSION: 09/09/2022 02:12:24 ---
+/SquareGravity/GeomAlgo.showTriangleIndices = 1
+/SquareGravity/GeomAlgo.drawColorTriangles = 0.298039 0.498039 0.8 1
+/SquareGravity/GeomAlgo.drawTriangles = 0
+/SquareGravity/GeomAlgo.drawColorEdges = 0.4 1 0.298039 1

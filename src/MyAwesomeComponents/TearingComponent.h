@@ -10,6 +10,8 @@
 
 #include <SofaUserInteraction/TopologicalChangeManager.h>
 
+#include <SofaBoundaryCondition/FixedConstraint.h>
+
 #include <fstream>
 
 namespace sofa::component::controller
@@ -66,6 +68,8 @@ namespace sofa::component::controller
 		// std::vector<core::CollisionModel*> m_surfaceCollisionModels;
 		sofa::component::topology::TriangleSetTopologyModifier* m_triangleMod;
 		sofa::component::topology::TriangleSetTopologyContainer* m_triangleCon;
+		sofa::component::projectiveconstraintset::FixedConstraint<sofa::defaulttype::Vec3Types>* m_fixedConstraint;
+
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
 		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_body;
 

@@ -49,7 +49,7 @@ namespace sofa::component::controller
         }
         // vparams->drawTool()->drawLines(vertices, 1, sofa::type::RGBAColor(1, 0, 1, 1));
 
-		if(m_maxPrincipalStress > 100.0f && onlyOnce)
+		if(m_maxPrincipalStress > 2.0f && onlyOnce)
 		{
    // const VecCoord& x = this->mstate->read(core::ConstVecCoordId::position())->getValue();
 
@@ -128,39 +128,7 @@ namespace sofa::component::controller
 			//m_triangleGeo->InciseAlongEdgeList(new_edges,
    //                     new_points, end_points, reachBorder);
 			onlyOnce = false;
-			core::topology::BaseMeshTopology::TriangleID ind_a = 1670;
-			core::topology::BaseMeshTopology::TriangleID ind_b = 1137;
-
-			Coord aCoord[3];
-			Coord bCoord[3];
-			sofa::type::Vec3 a;
-			sofa::type::Vec3 b;
-
-			sofa::Index a_last = sofa::InvalidID;
-			sofa::Index b_last = sofa::InvalidID;
-
-			sofa::component::topology::TriangleSetTopologyModifier* triangleMod;
-			m_topology->getContext()->get(triangleMod);
-
-			sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* triangleGeo;
-			m_topology->getContext()->get(triangleGeo);
-
-			triangleGeo->getTriangleVertexCoordinates(ind_a, aCoord);
-			a.clear();
-			a = (aCoord[0] + aCoord[1] + aCoord[2]) / 3.0;
-
-			triangleGeo->getTriangleVertexCoordinates(ind_b, bCoord);
-			b.clear();
-			b = (bCoord[0] + bCoord[1] + bCoord[2]) / 3.0;
-
-			sofa::type::vector< sofa::core::topology::TopologyElementType> topoPath_list;
-			sofa::type::vector<Index> indices_list;
-			sofa::type::vector< sofa::type::Vec<3, double> > coords2_list;
-
-			//errorTrianglesIndices.push_back(ind_ta);
-			//errorTrianglesIndices.push_back(ind_tb);
-
-			core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(ind_a);
+			
 
 			//for (auto&& t : m_triangleCon->getElementAroundElement(ind_a)) {
 			//	for (auto&& e_id : m_triangleCon->m_triangleCom->getEdgesInTriangle(t)) {
@@ -172,90 +140,138 @@ namespace sofa::component::controller
 			//}
 			const typename DataTypes::VecCoord& vect_c = m_triangleGeo->getDOF()->read(core::ConstVecCoordId::position())->getValue();
 			// ax + by + cz - d = 0
-			const float plane_a = 0;
-			const float plane_b = 1;
-			const float plane_c = 0;
-			//const float plane_a = m_maxPrincipalStressDir[0];
-			//const float plane_b = m_maxPrincipalStressDir[1];
-			//const float plane_c = m_maxPrincipalStressDir[2];
-			const float plane_d = -plane_a * a[0] - plane_b * a[1] - plane_c * a[2];
-			const auto plane_eqn = [&](Coord p) {
-				return plane_a * p[0] + plane_b * p[1] + plane_c * p[2] + plane_d;
+			/*const float plane_a = 1;
+			const float plane_b = 0;
+			const float plane_c = 0;*/
+			const auto findPoint = [&](core::topology::BaseMeshTopology::TriangleID source, Coord maxPrincipalStressDir, bool along_posX) {
+				core::topology::BaseMeshTopology::TriangleID ind_a = source;
+				core::topology::BaseMeshTopology::TriangleID ind_b = 1137;
+
+				Coord aCoord[3];
+				Coord bCoord[3];
+				sofa::type::Vec3 a;
+				sofa::type::Vec3 b;
+
+				sofa::Index a_last = sofa::InvalidID;
+				sofa::Index b_last = sofa::InvalidID;
+
+				sofa::component::topology::TriangleSetTopologyModifier* triangleMod;
+				m_topology->getContext()->get(triangleMod);
+
+				sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* triangleGeo;
+				m_topology->getContext()->get(triangleGeo);
+
+				triangleGeo->getTriangleVertexCoordinates(ind_a, aCoord);
+				a.clear();
+				a = (aCoord[0] + aCoord[1] + aCoord[2]) / 3.0;
+
+				triangleGeo->getTriangleVertexCoordinates(ind_b, bCoord);
+				b.clear();
+				b = (bCoord[0] + bCoord[1] + bCoord[2]) / 3.0;
+
+				sofa::type::vector< sofa::core::topology::TopologyElementType> topoPath_list;
+				sofa::type::vector<Index> indices_list;
+				sofa::type::vector< sofa::type::Vec<3, double> > coords2_list;
+
+				//errorTrianglesIndices.push_back(ind_ta);
+				//errorTrianglesIndices.push_back(ind_tb);
+
+				core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(ind_a);
+
+				const float plane_a = maxPrincipalStressDir[0];
+				const float plane_b = maxPrincipalStressDir[1];
+				const float plane_c = maxPrincipalStressDir[2];
+				const float plane_d = -plane_a * a[0] - plane_b * a[1] - plane_c * a[2];
+				const auto plane_eqn = [&](Coord p) {
+					return plane_a * p[0] + plane_b * p[1] + plane_c * p[2] + plane_d;
+				};
+
+				core::topology::BaseMeshTopology::TriangleID next_tri = -1;
+				float next_dist = 0;
+				while (next_dist < 40.0f) {
+					core::topology::BaseMeshTopology::TriangleID prevNext = next_tri;
+					for (auto&& t_id : m_triangleCon->getElementAroundElement(ind_a)) {
+						core::topology::BaseMeshTopology::PointID toBeCut1, toBeCut2;
+						auto& t = m_triangleCon->getTriangle(t_id);
+						Coord p1 = vect_c[t[0]];
+						Coord p2 = vect_c[t[1]];
+						Coord p3 = vect_c[t[2]];
+						float dist1 = (a - p1).norm2();
+						float dist2 = (a - p2).norm2();
+						float dist3 = (a - p3).norm2();
+
+						bool pos1 = plane_eqn(p1) > 0.0f;
+						bool pos2 = plane_eqn(p2) > 0.0f;
+						bool pos3 = plane_eqn(p3) > 0.0f;
+						if ((pos1 && pos2 && pos3) || (!pos1 && !pos2 && !pos3))
+							continue;
+						if (pos1 == pos2) {
+							toBeCut1 = t[2];
+							if (dist1 > dist2) {
+								toBeCut2 = t[0];
+							}
+							else {
+								toBeCut2 = t[1];
+							}
+						}
+						else if (pos2 == pos3) {
+							toBeCut1 = t[0];
+							if (dist2 > dist3) {
+								toBeCut2 = t[1];
+							}
+							else {
+								toBeCut2 = t[2];
+							}
+						}
+						else {
+							toBeCut1 = t[1];
+							if (dist3 > dist1) {
+								toBeCut2 = t[2];
+							}
+							else {
+								toBeCut2 = t[0];
+							}
+						}
+						core::topology::BaseMeshTopology::EdgeID cutEdge = m_triangleCon->getEdgeIndex(toBeCut1, toBeCut2);
+						core::topology::BaseMeshTopology::TrianglesAroundEdge tris = m_triangleCon->getTrianglesAroundEdge(cutEdge);
+						auto other = tris[0] == t_id ? tris[1] : tris[0];
+						Coord otherCoord[3];
+						triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
+						sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
+						float distCentroid = (a - otherCentroid).norm();
+						float xDiffPos = (a - otherCentroid).x() > 0;
+						if (distCentroid > next_dist && xDiffPos == along_posX) {
+							next_dist = distCentroid;
+							next_tri = other;
+						}
+					}
+					if (prevNext == next_tri)
+						break;
+				}
+				return next_tri;
 			};
 
-			core::topology::BaseMeshTopology::TriangleID next_tri = -1;
-			float next_dist = -1;
-			while (next_dist < 5.0f) {
-				core::topology::BaseMeshTopology::TriangleID prevNext = next_tri;
-				for (auto&& t_id : m_triangleCon->getElementAroundElement(ind_a)) {
-					core::topology::BaseMeshTopology::PointID toBeCut1, toBeCut2;
-					auto& t = m_triangleCon->getTriangle(t_id);
-					Coord p1 = vect_c[t[0]];
-					Coord p2 = vect_c[t[1]];
-					Coord p3 = vect_c[t[2]];
-					float dist1 = (a - p1).norm2();
-					float dist2 = (a - p2).norm2();
-					float dist3 = (a - p3).norm2();
+			core::topology::BaseMeshTopology::TriangleID tri1 = findPoint(m_maxPrincipalStressIdx, m_maxPrincipalStressDir, true);
+			core::topology::BaseMeshTopology::TriangleID tri2 = findPoint(m_maxPrincipalStressIdx, -m_maxPrincipalStressDir, false);
 
-					bool pos1 = plane_eqn(p1) > 0.0f;
-					bool pos2 = plane_eqn(p2) > 0.0f;
-					bool pos3 = plane_eqn(p3) > 0.0f;
-					if ((pos1 && pos2 && pos3) || (!pos1 && !pos2 && !pos3))
-						continue;
-					if (pos1 == pos2) {
-						toBeCut1 = t[2];
-						if (dist1 > dist2) {
-							toBeCut2 = t[0];
-						}
-						else {
-							toBeCut2 = t[1];
-						}
-					}
-					else if (pos2 == pos3) {
-						toBeCut1 = t[0];
-						if (dist2 > dist3) {
-							toBeCut2 = t[1];
-						}
-						else {
-							toBeCut2 = t[2];
-						}
-					}
-					else {
-						toBeCut1 = t[1];
-						if (dist3 > dist1) {
-							toBeCut2 = t[2];
-						}
-						else {
-							toBeCut2 = t[0];
-						}
-					}
-					core::topology::BaseMeshTopology::EdgeID cutEdge = m_triangleCon->getEdgeIndex(toBeCut1, toBeCut2);
-					core::topology::BaseMeshTopology::TrianglesAroundEdge tris = m_triangleCon->getTrianglesAroundEdge(cutEdge);
-					auto other = tris[0] == t_id ? tris[1] : tris[0];
-					Coord otherCoord[3];
-					triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
-					sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
-					float distCentroid = (a - otherCentroid).norm();
-					if (distCentroid > next_dist) {
-						next_dist = distCentroid;
-						next_tri = other;
-					}
-				}
-				if (prevNext == next_tri)
-					break;
-			}
 
 			//while (True) {
 
 			//}
-			if (next_tri != -1) {
-				sofa::type::Vec3 nextCentroid;
-				Coord nextPoints[3];
-				triangleGeo->getTriangleVertexCoordinates(next_tri, nextPoints);
+			if (tri1 != -1 && tri2 != -1) {
+				sofa::type::Vec3 tri1Centroid;
+				Coord tri1Points[3];
+				m_triangleGeo->getTriangleVertexCoordinates(tri1, tri1Points);
 
-				nextCentroid = (nextPoints[0] + nextPoints[1] + nextPoints[2]) / 3.0;
+				tri1Centroid = (tri1Points[0] + tri1Points[1] + tri1Points[2]) / 3.0;
 
-				topologyChangeManager.incisionCollisionModel(m_body, ind_a, a, m_body, next_tri, nextCentroid, 50);
+				sofa::type::Vec3 tri2Centroid;
+				Coord tri2Points[3];
+				m_triangleGeo->getTriangleVertexCoordinates(tri2, tri2Points);
+
+				tri2Centroid = (tri2Points[0] + tri2Points[1] + tri2Points[2]) / 3.0;
+
+				topologyChangeManager.incisionCollisionModel(m_body, tri1, tri1Centroid, m_body, tri2, tri2Centroid, 50);
 			}
 			//bool isPathOk = triangleGeo->computeIntersectedObjectsList(sofa::InvalidID, a, b, ind_a, ind_b, topoPath_list, indices_list, coords2_list);
 
@@ -343,9 +359,14 @@ namespace sofa::component::controller
 
 		// sofa::component::topology::TriangleSetGeometryAlgorithms<Vec3Types>* triangleGeo;
 		this->m_topology->getContext()->get(m_triangleGeo);
+		this->m_topology->getContext()->get(m_fixedConstraint);
 		this->m_topology->getContext()->get(m_body);
 
+		sofa::type::vector<core::topology::BaseMeshTopology::PointID> borderPoints = m_triangleCon->getPointsOnBorder();
 
+		for (auto&& pid : borderPoints) {
+			m_fixedConstraint->addConstraint(pid);
+		}
 
 		if (m_triangleMod == nullptr || m_triangleGeo == nullptr || m_body == nullptr || m_triangleCon == nullptr)
 		{
