@@ -13,6 +13,24 @@
 
 namespace sofa::component::controller
 {
+	template <class DataTypes>
+	core::topology::BaseMeshTopology::TriangleID TearingComponent<DataTypes>::getOtherTriangle(const TriangleData& curr,
+		core::topology::BaseMeshTopology::EdgeID edge)
+	{
+		core::topology::BaseMeshTopology::TrianglesAroundEdge tris = m_triangleCon->getTrianglesAroundEdge(edge);
+		core::topology::BaseMeshTopology::TriangleID otherTri = tris[0] == curr.t ? tris[1] : tris[0];
+		return otherTri;
+	}
+
+	template <class DataTypes>
+	sofa::type::vector<core::topology::BaseMeshTopology::TriangleID>& TearingComponent<DataTypes>::getAdjacentTriangles(const TriangleData& curr)
+	{
+		sofa::type::vector<core::topology::BaseMeshTopology::TriangleID> toRet;
+		toRet.push_back(getOtherTriangle(curr, curr.e12));
+		toRet.push_back(getOtherTriangle(curr, curr.e23));
+		toRet.push_back(getOtherTriangle(curr, curr.e31));
+		return toRet;
+	}
 
 	template <class DataTypes>
 	core::topology::BaseMeshTopology::TriangleID TearingComponent<DataTypes>::findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
@@ -32,7 +50,7 @@ namespace sofa::component::controller
 
 		sofa::type::vector< sofa::core::topology::TopologyElementType> topoPathList;
 		sofa::type::vector<Index> indicesList;
-		sofa::type::vector< sofa::type::Vec<3, double> > coords2List;
+		sofa::type::vector<sofa::type::Vec<3, double>> coords2List;
 
 		core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(aIndex);
 
@@ -40,75 +58,110 @@ namespace sofa::component::controller
 		const float planeB = maxPrincipalStressDir[1];
 		const float planeC = maxPrincipalStressDir[2];
 		const float planeD = -planeA * aCentroid[0] - planeB * aCentroid[1] - planeC * aCentroid[2];
-		const auto planeEqn = [&](Coord p) {
-			return planeA * p[0] + planeB * p[1] + planeC * p[2] + planeD;
+		// returns t for intersection of plane and p1 + (p2 - p1) * t
+		const auto planeLineIntersction = [&](Coord p1, Coord p2) {
+			return (-planeA * p1[0] - planeB * p1[1] - planeC * p1[2] - planeD) 
+				/ (planeA * (p2[0] - p1[0]) + planeB * (p2[1] - p1[1]) + planeC * (p2[2] - p1[2]));
 		};
 
-		core::topology::BaseMeshTopology::TriangleID endPointID = -1;
+		// stores all triangles that will be cut
+		sofa::type::vector<core::topology::BaseMeshTopology::TriangleID> incisionIDs = { source };
+		
 		// distance of centroid from source
-		float endPointDistance = 0;
-		while (endPointDistance < 40.0f) {
-			core::topology::BaseMeshTopology::TriangleID prevNext = endPointID;
-			for (auto&& currID : m_triangleCon->getElementAroundElement(aIndex)) {
-				core::topology::BaseMeshTopology::PointID toBeCut1, toBeCut2;
-				auto& t = m_triangleCon->getTriangle(currID);
-				Coord p1 = points[t[0]];
-				Coord p2 = points[t[1]];
-				Coord p3 = points[t[2]];
+		float nextCandidateDistance = 0;
+		core::topology::BaseMeshTopology::TriangleID nextCandidate;
+
+		while (nextCandidateDistance < 40.0f) {
+			nextCandidate = sofa::InvalidID;
+			TriangleData lastCutTri(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
+
+			for (auto&& currID : getAdjacentTriangles(lastCutTri)) {
+				core::topology::BaseMeshTopology::EdgeID toBeCut;
+				TriangleData currTri(currID, points, m_triangleCon);
+				Coord p1 = points[currTri.p1];
+				Coord p2 = points[currTri.p2];
+				Coord p3 = points[currTri.p3];
 				float dist1 = (aCentroid - p1).norm2();
 				float dist2 = (aCentroid - p2).norm2();
 				float dist3 = (aCentroid - p3).norm2();
 
-				bool pos1 = planeEqn(p1) > 0.0f;
-				bool pos2 = planeEqn(p2) > 0.0f;
-				bool pos3 = planeEqn(p3) > 0.0f;
-				if ((pos1 && pos2 && pos3) || (!pos1 && !pos2 && !pos3))
+				float t12 = planeLineIntersction(p1, p2);
+				float t23 = planeLineIntersction(p2, p3);
+				float t31 = planeLineIntersction(p3, p1);
+
+				bool t12Intersection = t12 > 0.0f && t12 < 1.0f;
+				bool t23Intersection = t23 > 0.0f && t23 < 1.0f;
+				bool t31Intersection = t31 > 0.0f && t31 < 1.0f;
+
+				if (!(t12Intersection || t23Intersection || t31Intersection))
 					continue;
-				if (pos1 == pos2) {
-					toBeCut1 = t[2];
-					if (dist1 > dist2) {
-						toBeCut2 = t[0];
+
+				// determine which edge to cur
+				// first we find the edge between current and previous endPoint
+				// as there is no need to consider it
+				// take an assumption that there are no looping cuts i.e. 
+				// out of the adjacent triangles only one is present inincisionIDs
+				// which will always be the last element of incisionIDs
+				core::topology::BaseMeshTopology::TriangleID otherTri12 = getOtherTriangle(currTri, currTri.e12);
+				core::topology::BaseMeshTopology::TriangleID otherTri23 = getOtherTriangle(currTri, currTri.e23);
+				core::topology::BaseMeshTopology::TriangleID otherTri31 = getOtherTriangle(currTri, currTri.e31);
+
+				core::topology::BaseMeshTopology::TriangleID last = incisionIDs[incisionIDs.size() - 1];
+
+				if (otherTri12 == lastCutTri.t) {
+					if (t23Intersection) {
+						toBeCut = currTri.e23;
+					}
+					else if (t31Intersection) {
+						toBeCut = currTri.e31;
 					}
 					else {
-						toBeCut2 = t[1];
+						throw std::exception("Unreachable!");
 					}
 				}
-				else if (pos2 == pos3) {
-					toBeCut1 = t[0];
-					if (dist2 > dist3) {
-						toBeCut2 = t[1];
+				else if (otherTri23 == lastCutTri.t) {
+					if (t31Intersection) {
+						toBeCut = currTri.e31;
+					}
+					else if (t12Intersection) {
+						toBeCut = currTri.e12;
 					}
 					else {
-						toBeCut2 = t[2];
+						throw std::exception("Unreachable!");
+					}
+				}
+				else if (otherTri31 == lastCutTri.t) {
+					if (t12Intersection) {
+						toBeCut = currTri.e12;
+					}
+					else if (t23Intersection) {
+						toBeCut = currTri.e23;
+					}
+					else {
+						throw std::exception("Unreachable!");
 					}
 				}
 				else {
-					toBeCut1 = t[1];
-					if (dist3 > dist1) {
-						toBeCut2 = t[2];
-					}
-					else {
-						toBeCut2 = t[0];
-					}
+					throw std::exception("Unreachable!");
 				}
-				core::topology::BaseMeshTopology::EdgeID cutEdge = m_triangleCon->getEdgeIndex(toBeCut1, toBeCut2);
-				core::topology::BaseMeshTopology::TrianglesAroundEdge tris = m_triangleCon->getTrianglesAroundEdge(cutEdge);
-				auto other = tris[0] == currID ? tris[1] : tris[0];
+				
+				core::topology::BaseMeshTopology::TriangleID other = getOtherTriangle(currTri, toBeCut);
 				Coord otherCoord[3];
 				m_triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
 				sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
 				float distCentroid = (aCentroid - otherCentroid).norm();
 				float xDiffPos = (aCentroid - otherCentroid).x() > 0;
-				if (distCentroid > endPointDistance && xDiffPos == alongPosX) {
-					endPointDistance = distCentroid;
-					endPointID = other;
+				if (distCentroid > nextCandidateDistance && xDiffPos == alongPosX) {
+					nextCandidateDistance = distCentroid;
+					nextCandidate = other;
 				}
 			}
-			if (prevNext == endPointID)
+			if (nextCandidate == sofa::InvalidID)
 				break;
+			incisionIDs.push_back(nextCandidate);
 		}
-		std::cout << endPointDistance << std::endl;
-		return endPointID;
+		std::cout << nextCandidateDistance << std::endl;
+		return incisionIDs[incisionIDs.size() - 1];;
 	}
 
 	template <class DataTypes>

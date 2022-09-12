@@ -12,7 +12,7 @@
     <RequiredPlugin name="SofaOpenglVisual"/>
     <RequiredPlugin pluginName='SofaHaptics'/>
 
-    <VisualStyle displayFlags="showCollisionModels showWireFrame" />
+    <VisualStyle displayFlags="" />
     <DefaultPipeline verbose="0" />
     <BruteForceBroadPhase/>
     <BVHNarrowPhase/>

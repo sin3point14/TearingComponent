@@ -57,11 +57,37 @@ namespace sofa::component::controller
 
 	protected:
 
+		class TriangleData {
+		public:
+			core::topology::BaseMeshTopology::TriangleID t;
+			core::topology::BaseMeshTopology::PointID p1, p2, p3;
+			core::topology::BaseMeshTopology::EdgeID e12, e23, e31;
+			TriangleData(core::topology::BaseMeshTopology::TriangleID tID,
+				const VecCoord& points,
+				sofa::component::topology::TriangleSetTopologyContainer* triangleCon)
+				: t(tID)
+			{
+				sofa::topology::Triangle t = triangleCon->getTriangle(tID);
+				p1 = t[0];
+				p2 = t[1];
+				p3 = t[2];
+				e12 = triangleCon->getEdgeIndex(p1, p2);
+				e23 = triangleCon->getEdgeIndex(p2, p3);
+				e31 = triangleCon->getEdgeIndex(p3, p1);
+			}
+		};
+
 		sofa::component::topology::TriangleSetTopologyContainer* m_triangleCon;
 		sofa::component::projectiveconstraintset::FixedConstraint<sofa::defaulttype::Vec3Types>* m_fixedConstraint;
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
 		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_collisionModel;
 		sofa::component::collision::TopologicalChangeManager m_topologyChangeManager;
+
+		core::topology::BaseMeshTopology::TriangleID getOtherTriangle(const TriangleData& curr,
+			core::topology::BaseMeshTopology::EdgeID edge);
+
+		// Adjacent Triangles sharing en edge
+		sofa::type::vector<core::topology::BaseMeshTopology::TriangleID>& getAdjacentTriangles(const TriangleData& curr);
 
 		// finds one end point, need to call this twice to
 		// with true and false along_posX values to get both
