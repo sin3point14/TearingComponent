@@ -47,52 +47,32 @@ namespace sofa::component::controller
     typedef sofa::core::topology::BaseMeshTopology::TrianglesAroundVertex TrianglesAroundVertex;
 
     typedef sofa::type::Quat<Real> Quat;
-		// typedef defaulttype::Vec3Types DataTypes;
-		// typedef typename DataTypes::Coord Coord;
-		// typedef typename DataTypes::Real Real;
 
 		/// Sofa API init method of the component
 		void init() override;
-		/// Sofa API reset method of the component
-		// void reset() override;
 
-		/// Impl method that will compute the intersection and check if some element have to be removed.
-		// void doTear();
 		Coord m_maxPrincipalStressDir;
 		Real m_maxPrincipalStress;
 		Size m_maxPrincipalStressIdx;
 
 	protected:
 
-		// Pointer to the target object collision model
-		// std::vector<core::CollisionModel*> m_surfaceCollisionModels;
-		sofa::component::topology::TriangleSetTopologyModifier* m_triangleMod;
 		sofa::component::topology::TriangleSetTopologyContainer* m_triangleCon;
 		sofa::component::projectiveconstraintset::FixedConstraint<sofa::defaulttype::Vec3Types>* m_fixedConstraint;
-
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
-		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_body;
+		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_collisionModel;
+		sofa::component::collision::TopologicalChangeManager m_topologyChangeManager;
 
-		sofa::component::collision::TopologicalChangeManager topologyChangeManager;
-		//sofa::component::collision::TriangleCollisionModel m_triangleCollisionModel;
-
-
-
-		/// Default constructor
-		// TearingComponent();
-
-		/// Default destructor
-		// ~TearingComponent() override;
-
+		// finds one end point, need to call this twice to
+		// with true and false along_posX values to get both
+		// end points
+		core::topology::BaseMeshTopology::TriangleID findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source, 
+			Coord maxPrincipalStressDir,
+			const VecCoord& points,
+			bool alongPosX);
 
 	public:
     	void addForce(const core::MechanicalParams* mparams, DataVecDeriv& f, const DataVecCoord& x, const DataVecDeriv& v) override;
 		void draw(const core::visual::VisualParams* vparams) override;
-
-		// Data<Real> d_yieldStress;
-		// sofa::component::forcefield::TriangularFEMForceField<DataTypes>* m_triangleFEMForceField;
-		//sofa::component::forcefield::TriangularFEMForceField<DataTypes>* m_triangularFEMForceField;
-
-		//SingleLink<TearingComponent, sofa::component::forcefield::TriangularFEMForceField<DataTypes>, BaseLink::FLAG_STOREPATH | BaseLink::FLAG_STRONGLINK> l_triangularForceField;
 	};
 }
