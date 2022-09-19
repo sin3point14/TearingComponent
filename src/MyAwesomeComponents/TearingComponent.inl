@@ -33,10 +33,13 @@ namespace sofa::component::controller
 	}
 
 	template <class DataTypes>
-	core::topology::BaseMeshTopology::TriangleID TearingComponent<DataTypes>::findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
+	typename TearingComponent<DataTypes>::TriangleData TearingComponent<DataTypes>::findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
 		Coord maxPrincipalStressDir,
 		const VecCoord& points,
-		bool alongPosX)
+		bool alongPosX,
+		sofa::type::vector< sofa::core::topology::TopologyElementType>& topoPath_list,
+		sofa::type::vector<Index>& indices_list,
+		sofa::type::vector<Coord>& coords2_list)
 	{
 		core::topology::BaseMeshTopology::TriangleID aIndex = source;
 
@@ -50,7 +53,7 @@ namespace sofa::component::controller
 
 		sofa::type::vector< sofa::core::topology::TopologyElementType> topoPathList;
 		sofa::type::vector<Index> indicesList;
-		sofa::type::vector<sofa::type::Vec<3, double>> coords2List;
+		sofa::type::vector<Coord> coords2List;
 
 		core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(aIndex);
 
@@ -71,12 +74,24 @@ namespace sofa::component::controller
 		float nextCandidateDistance = 0;
 		core::topology::BaseMeshTopology::TriangleID nextCandidate;
 
-		while (nextCandidateDistance < 40.0f) {
+		while (nextCandidateDistance < 20.0f) {
 			nextCandidate = sofa::InvalidID;
 			TriangleData lastCutTri(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
+			core::topology::BaseMeshTopology::EdgeID cutEdgeFar = sofa::InvalidID;
+			core::topology::BaseMeshTopology::EdgeID cutEdgeClose = sofa::InvalidID;
+			float cutRatio = -1;
 
 			for (auto&& currID : getAdjacentTriangles(lastCutTri)) {
-				core::topology::BaseMeshTopology::EdgeID toBeCut;
+				// TODO: process 1 triangle every iteration, this code has 
+				// become extremly convoluted because I didn't realise I
+				// was processing 2 triangles at once
+				// 
+				// Since my algortihm advances 2 triangles every iteration,
+				// We calculate 2 edge cuts, this holds the farther one
+				core::topology::BaseMeshTopology::EdgeID toBeCutFar;
+				// This holds the near edge
+				core::topology::BaseMeshTopology::EdgeID toBeCutClose;
+				float toBeCutRatio = -1;
 				TriangleData currTri(currID, points, m_triangleCon);
 				Coord p1 = points[currTri.p1];
 				Coord p2 = points[currTri.p2];
@@ -96,7 +111,7 @@ namespace sofa::component::controller
 				if (!(t12Intersection || t23Intersection || t31Intersection))
 					continue;
 
-				// determine which edge to cur
+				// determine which edge to cut
 				// first we find the edge between current and previous endPoint
 				// as there is no need to consider it
 				// take an assumption that there are no looping cuts i.e. 
@@ -109,33 +124,43 @@ namespace sofa::component::controller
 				core::topology::BaseMeshTopology::TriangleID last = incisionIDs[incisionIDs.size() - 1];
 
 				if (otherTri12 == lastCutTri.t) {
+					toBeCutClose = currTri.e12;
 					if (t23Intersection) {
-						toBeCut = currTri.e23;
+						toBeCutFar = currTri.e23;
+						//WARNING: This could be 1 - t23, I am not sure about order of edges
+						toBeCutRatio = t23;
 					}
 					else if (t31Intersection) {
-						toBeCut = currTri.e31;
+						toBeCutFar = currTri.e31;
+						toBeCutRatio = t31;
 					}
 					else {
 						throw std::exception("Unreachable!");
 					}
 				}
 				else if (otherTri23 == lastCutTri.t) {
+					toBeCutClose = currTri.e23;
 					if (t31Intersection) {
-						toBeCut = currTri.e31;
+						toBeCutFar = currTri.e31;
+						toBeCutRatio = t31;
 					}
 					else if (t12Intersection) {
-						toBeCut = currTri.e12;
+						toBeCutFar = currTri.e12;
+						toBeCutRatio = t12;
 					}
 					else {
 						throw std::exception("Unreachable!");
 					}
 				}
 				else if (otherTri31 == lastCutTri.t) {
+					toBeCutClose = currTri.e31;
 					if (t12Intersection) {
-						toBeCut = currTri.e12;
+						toBeCutFar = currTri.e12;
+						toBeCutRatio = t12;
 					}
 					else if (t23Intersection) {
-						toBeCut = currTri.e23;
+						toBeCutFar = currTri.e23;
+						toBeCutRatio = t23;
 					}
 					else {
 						throw std::exception("Unreachable!");
@@ -145,7 +170,7 @@ namespace sofa::component::controller
 					throw std::exception("Unreachable!");
 				}
 				
-				core::topology::BaseMeshTopology::TriangleID other = getOtherTriangle(currTri, toBeCut);
+				core::topology::BaseMeshTopology::TriangleID other = getOtherTriangle(currTri, toBeCutFar);
 				Coord otherCoord[3];
 				m_triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
 				sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
@@ -154,14 +179,39 @@ namespace sofa::component::controller
 				if (distCentroid > nextCandidateDistance && xDiffPos == alongPosX) {
 					nextCandidateDistance = distCentroid;
 					nextCandidate = other;
+					cutEdgeFar = toBeCutFar;
+					cutEdgeClose = toBeCutClose;
+					cutRatio = toBeCutRatio;
 				}
 			}
 			if (nextCandidate == sofa::InvalidID)
 				break;
 			incisionIDs.push_back(nextCandidate);
+
+			topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
+			indices_list.push_back(cutEdgeClose);
+			topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
+			indices_list.push_back(cutEdgeFar);
+			Coord baryCoords;
+			baryCoords[0] = 0.5;
+			baryCoords[1] = 0.0;
+			baryCoords[2] = 0.0;
+			coords2_list.push_back(baryCoords);
+			coords2_list.push_back(baryCoords);
 		}
+
+		// End point: centroid of last triangle
+		core::topology::BaseMeshTopology::TriangleID lastTri = incisionIDs[incisionIDs.size() - 1];
+		Coord baryCoords;
+		baryCoords[0] = 1./3;
+		baryCoords[1] = 1./3;
+		baryCoords[2] = 1./3;
+		topoPath_list.push_back(core::topology::TopologyElementType::TRIANGLE);
+		indices_list.push_back(lastTri);
+		coords2_list.push_back(baryCoords);
+
 		std::cout << nextCandidateDistance << std::endl;
-		return incisionIDs[incisionIDs.size() - 1];;
+		return TriangleData(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
 	}
 
 	template <class DataTypes>
@@ -201,24 +251,74 @@ namespace sofa::component::controller
 			// PointIDs -> Points
 			const typename DataTypes::VecCoord& points = m_triangleGeo->getDOF()->read(core::ConstVecCoordId::position())->getValue();
 
-			core::topology::BaseMeshTopology::TriangleID tri1 = findCutEndpoint(m_maxPrincipalStressIdx, m_maxPrincipalStressDir, points, true);
-			core::topology::BaseMeshTopology::TriangleID tri2 = findCutEndpoint(m_maxPrincipalStressIdx, -m_maxPrincipalStressDir, points, false);
+			sofa::type::vector< sofa::core::topology::TopologyElementType> topoPath_list;
+			sofa::type::vector<Index> indices_list;
+			sofa::type::vector<Coord> coords2_list;
 
-			if (tri1 != -1 && tri2 != -1) {
-				sofa::type::Vec3 tri1Centroid;
-				Coord tri1Points[3];
-				m_triangleGeo->getTriangleVertexCoordinates(tri1, tri1Points);
+			TriangleData tri1 = findCutEndpoint(m_maxPrincipalStressIdx, m_maxPrincipalStressDir, points, true, topoPath_list, indices_list, coords2_list);
+			
+			sofa::type::vector< sofa::core::topology::TopologyElementType> topoPath_list2;
+			sofa::type::vector<Index> indices_list2;
+			sofa::type::vector<Coord> coords2_list2;
+			
+			TriangleData tri2 = findCutEndpoint(m_maxPrincipalStressIdx, -m_maxPrincipalStressDir, points, false, topoPath_list2, indices_list2, coords2_list2);
 
-				tri1Centroid = (tri1Points[0] + tri1Points[1] + tri1Points[2]) / 3.0;
+			std::reverse(topoPath_list.begin(), topoPath_list.end());
+			std::reverse(indices_list.begin(), indices_list.end());
+			std::reverse(coords2_list.begin(), coords2_list.end());
 
-				sofa::type::Vec3 tri2Centroid;
-				Coord tri2Points[3];
-				m_triangleGeo->getTriangleVertexCoordinates(tri2, tri2Points);
+			topoPath_list.insert(topoPath_list.end(), topoPath_list2.begin(), topoPath_list2.end());
+			indices_list.insert(indices_list.end(), indices_list2.begin(), indices_list2.end());
+			coords2_list.insert(coords2_list.end(), coords2_list2.begin(), coords2_list2.end());
 
-				tri2Centroid = (tri2Points[0] + tri2Points[1] + tri2Points[2]) / 3.0;
+			sofa::type::vector<core::topology::BaseMeshTopology::Edge> edges;
 
-				m_topologyChangeManager.incisionCollisionModel(m_collisionModel, tri1, tri1Centroid, m_collisionModel, tri2, tri2Centroid, 50);
+			for (auto&& e : indices_list)
+			{
+				std::cout << m_triangleCon->getEdge(e) <<  "  ";
 			}
+
+			std::cout << edges;
+
+			sofa::type::vector< Index > new_edges;
+			int result = m_triangleGeo->SplitAlongPath(sofa::InvalidID, (points[tri1.p1] + points[tri1.p2] + points[tri1.p3]) / 3,
+				sofa::InvalidID, (points[tri2.p1] + points[tri2.p2] + points[tri2.p3]) / 3,
+				topoPath_list, indices_list, coords2_list, new_edges, 0.0, 0.0);
+
+			if (result == -1)
+			{
+				std::cout << "SplitAlongPath FAILED" << std::endl;
+				return;
+			}
+
+			sofa::type::vector<Index> new_points;
+			sofa::type::vector<Index> end_points;
+			bool reachBorder = false;
+			bool incision_ok = m_triangleGeo->InciseAlongEdgeList(new_edges, new_points, end_points, reachBorder);
+
+			if (!incision_ok)
+			{
+				std::cout << "InciseAlongEdgeList FAILED" << std::endl;
+				return;
+			}
+
+			m_triangleMod->notifyEndingEvent();
+
+			//if (tri1 != -1 && tri2 != -1) {
+			//	sofa::type::Vec3 tri1Centroid;
+			//	Coord tri1Points[3];
+			//	m_triangleGeo->getTriangleVertexCoordinates(tri1, tri1Points);
+
+			//	tri1Centroid = (tri1Points[0] + tri1Points[1] + tri1Points[2]) / 3.0;
+
+			//	sofa::type::Vec3 tri2Centroid;
+			//	Coord tri2Points[3];
+			//	m_triangleGeo->getTriangleVertexCoordinates(tri2, tri2Points);
+
+			//	tri2Centroid = (tri2Points[0] + tri2Points[1] + tri2Points[2]) / 3.0;
+
+			//	m_topologyChangeManager.incisionCollisionModel(m_collisionModel, tri1, tri1Centroid, m_collisionModel, tri2, tri2Centroid, 50);
+			//}
 		}
 	}
 
@@ -250,6 +350,7 @@ namespace sofa::component::controller
 		sofa::component::forcefield::TriangularFEMForceField<DataTypes>::init();
 		this->m_topology->getContext()->get(m_triangleCon);
 		this->m_topology->getContext()->get(m_triangleGeo);
+		this->m_topology->getContext()->get(m_triangleMod);
 		this->m_topology->getContext()->get(m_fixedConstraint);
 		this->m_topology->getContext()->get(m_collisionModel);
 
@@ -262,7 +363,7 @@ namespace sofa::component::controller
 
 		if (m_triangleGeo == nullptr || m_collisionModel == nullptr || m_triangleCon == nullptr)
 		{
-			msg_error() << "No TriangleSetTopologyContainer, FixedConstraint, TriangleSetGeometryAlgorithms, TopologicalChangeManager or TriangleCollisionModel not found";
+			msg_error() << "No TriangleSetTopologyContainer, FixedConstraint, TriangleSetGeometryAlgorithms, TriangleSetTopologyModifier, TopologicalChangeManager or TriangleCollisionModel not found";
 			sofa::core::objectmodel::BaseObject::d_componentState.setValue(sofa::core::objectmodel::ComponentState::Invalid);
 			return;
 		}

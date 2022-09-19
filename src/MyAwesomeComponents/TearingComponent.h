@@ -80,6 +80,7 @@ namespace sofa::component::controller
 		sofa::component::topology::TriangleSetTopologyContainer* m_triangleCon;
 		sofa::component::projectiveconstraintset::FixedConstraint<sofa::defaulttype::Vec3Types>* m_fixedConstraint;
 		sofa::component::topology::TriangleSetGeometryAlgorithms<sofa::defaulttype::Vec3Types>* m_triangleGeo;
+		sofa::component::topology::TriangleSetTopologyModifier* m_triangleMod;
 		sofa::component::collision::TriangleCollisionModel<sofa::defaulttype::Vec3Types>* m_collisionModel;
 		sofa::component::collision::TopologicalChangeManager m_topologyChangeManager;
 
@@ -92,10 +93,13 @@ namespace sofa::component::controller
 		// finds one end point, need to call this twice to
 		// with true and false along_posX values to get both
 		// end points
-		core::topology::BaseMeshTopology::TriangleID findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source, 
+		TriangleData findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
 			Coord maxPrincipalStressDir,
 			const VecCoord& points,
-			bool alongPosX);
+			bool alongPosX,
+			sofa::type::vector< sofa::core::topology::TopologyElementType>& topoPath_list,
+			sofa::type::vector<Index>& indices_list,
+			sofa::type::vector<Coord>& coords2_list);
 
 	public:
     	void addForce(const core::MechanicalParams* mparams, DataVecDeriv& f, const DataVecCoord& x, const DataVecDeriv& v) override;
