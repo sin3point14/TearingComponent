@@ -90,6 +90,9 @@ namespace sofa::component::controller
 		// Adjacent Triangles sharing en edge
 		sofa::type::vector<core::topology::BaseMeshTopology::TriangleID>& getAdjacentTriangles(const TriangleData& curr);
 
+		float fixEdgeBarycentricParameter(core::topology::BaseMeshTopology::EdgeID edge,
+			core::topology::BaseMeshTopology::PointID p1, float t);
+
 		// finds one end point, need to call this twice to
 		// with true and false along_posX values to get both
 		// end points

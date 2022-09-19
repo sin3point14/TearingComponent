@@ -33,6 +33,20 @@ namespace sofa::component::controller
 	}
 
 	template <class DataTypes>
+	float TearingComponent<DataTypes>::fixEdgeBarycentricParameter(core::topology::BaseMeshTopology::EdgeID edge,
+		core::topology::BaseMeshTopology::PointID p1, float t)
+	{
+		if (m_triangleCon->getEdge(edge)[0] == p1)
+		{
+			return t;
+		}
+		else
+		{
+			return 1 - t;
+		}
+	}
+
+	template <class DataTypes>
 	typename TearingComponent<DataTypes>::TriangleData TearingComponent<DataTypes>::findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
 		Coord maxPrincipalStressDir,
 		const VecCoord& points,
@@ -74,24 +88,29 @@ namespace sofa::component::controller
 		float nextCandidateDistance = 0;
 		core::topology::BaseMeshTopology::TriangleID nextCandidate;
 
-		while (nextCandidateDistance < 20.0f) {
+		while (nextCandidateDistance < 40.0f) {
 			nextCandidate = sofa::InvalidID;
 			TriangleData lastCutTri(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
 			core::topology::BaseMeshTopology::EdgeID cutEdgeFar = sofa::InvalidID;
 			core::topology::BaseMeshTopology::EdgeID cutEdgeClose = sofa::InvalidID;
-			float cutRatio = -1;
+			float cutRatioFar = -1;
+			float cutRatioClose = -1;
 
 			for (auto&& currID : getAdjacentTriangles(lastCutTri)) {
 				// TODO: process 1 triangle every iteration, this code has 
 				// become extremly convoluted because I didn't realise I
 				// was processing 2 triangles at once
+				// This can be simplifying by just finding an edge that 
+				// intersects the plane and selecting the other triangle
+				// on the edge as the next triangle
 				// 
 				// Since my algortihm advances 2 triangles every iteration,
 				// We calculate 2 edge cuts, this holds the farther one
 				core::topology::BaseMeshTopology::EdgeID toBeCutFar;
 				// This holds the near edge
 				core::topology::BaseMeshTopology::EdgeID toBeCutClose;
-				float toBeCutRatio = -1;
+				float toBeCutFarRatio = -1;
+				float toBeCutCloseRatio = -1;
 				TriangleData currTri(currID, points, m_triangleCon);
 				Coord p1 = points[currTri.p1];
 				Coord p2 = points[currTri.p2];
@@ -125,14 +144,16 @@ namespace sofa::component::controller
 
 				if (otherTri12 == lastCutTri.t) {
 					toBeCutClose = currTri.e12;
+					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
 					if (t23Intersection) {
 						toBeCutFar = currTri.e23;
 						//WARNING: This could be 1 - t23, I am not sure about order of edges
-						toBeCutRatio = t23;
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
 					}
 					else if (t31Intersection) {
 						toBeCutFar = currTri.e31;
-						toBeCutRatio = t31;
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
+
 					}
 					else {
 						throw std::exception("Unreachable!");
@@ -140,13 +161,14 @@ namespace sofa::component::controller
 				}
 				else if (otherTri23 == lastCutTri.t) {
 					toBeCutClose = currTri.e23;
+					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
 					if (t31Intersection) {
 						toBeCutFar = currTri.e31;
-						toBeCutRatio = t31;
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
 					}
 					else if (t12Intersection) {
 						toBeCutFar = currTri.e12;
-						toBeCutRatio = t12;
+						toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
 					}
 					else {
 						throw std::exception("Unreachable!");
@@ -154,13 +176,14 @@ namespace sofa::component::controller
 				}
 				else if (otherTri31 == lastCutTri.t) {
 					toBeCutClose = currTri.e31;
+					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
 					if (t12Intersection) {
 						toBeCutFar = currTri.e12;
-						toBeCutRatio = t12;
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
 					}
 					else if (t23Intersection) {
 						toBeCutFar = currTri.e23;
-						toBeCutRatio = t23;
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
 					}
 					else {
 						throw std::exception("Unreachable!");
@@ -181,7 +204,8 @@ namespace sofa::component::controller
 					nextCandidate = other;
 					cutEdgeFar = toBeCutFar;
 					cutEdgeClose = toBeCutClose;
-					cutRatio = toBeCutRatio;
+					cutRatioFar = toBeCutFarRatio;
+					cutRatioClose = toBeCutCloseRatio;
 				}
 			}
 			if (nextCandidate == sofa::InvalidID)
@@ -193,10 +217,11 @@ namespace sofa::component::controller
 			topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
 			indices_list.push_back(cutEdgeFar);
 			Coord baryCoords;
-			baryCoords[0] = 0.5;
+			baryCoords[0] = cutRatioClose;
 			baryCoords[1] = 0.0;
 			baryCoords[2] = 0.0;
 			coords2_list.push_back(baryCoords);
+			baryCoords[0] = cutRatioFar;
 			coords2_list.push_back(baryCoords);
 		}
 
@@ -303,22 +328,6 @@ namespace sofa::component::controller
 			}
 
 			m_triangleMod->notifyEndingEvent();
-
-			//if (tri1 != -1 && tri2 != -1) {
-			//	sofa::type::Vec3 tri1Centroid;
-			//	Coord tri1Points[3];
-			//	m_triangleGeo->getTriangleVertexCoordinates(tri1, tri1Points);
-
-			//	tri1Centroid = (tri1Points[0] + tri1Points[1] + tri1Points[2]) / 3.0;
-
-			//	sofa::type::Vec3 tri2Centroid;
-			//	Coord tri2Points[3];
-			//	m_triangleGeo->getTriangleVertexCoordinates(tri2, tri2Points);
-
-			//	tri2Centroid = (tri2Points[0] + tri2Points[1] + tri2Points[2]) / 3.0;
-
-			//	m_topologyChangeManager.incisionCollisionModel(m_collisionModel, tri1, tri1Centroid, m_collisionModel, tri2, tri2Centroid, 50);
-			//}
 		}
 	}
 
