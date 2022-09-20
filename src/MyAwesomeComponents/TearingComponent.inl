@@ -147,7 +147,6 @@ namespace sofa::component::controller
 					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
 					if (t23Intersection) {
 						toBeCutFar = currTri.e23;
-						//WARNING: This could be 1 - t23, I am not sure about order of edges
 						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
 					}
 					else if (t31Intersection) {
@@ -168,7 +167,7 @@ namespace sofa::component::controller
 					}
 					else if (t12Intersection) {
 						toBeCutFar = currTri.e12;
-						toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
+						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
 					}
 					else {
 						throw std::exception("Unreachable!");
@@ -266,7 +265,6 @@ namespace sofa::component::controller
 				m_maxPrincipalStressDir = direction;
 				m_maxPrincipalStressIdx = i;
 			}
-			
         }
 
 		// heuristic
@@ -337,7 +335,7 @@ namespace sofa::component::controller
 		sofa::component::forcefield::TriangularFEMForceField<DataTypes>::draw(vparams);
 		if(m_maxPrincipalStress > 100.0f)
 		{
-    const VecCoord& x = this->mstate->read(core::ConstVecCoordId::position())->getValue();
+			const VecCoord& x = this->mstate->read(core::ConstVecCoordId::position())->getValue();
 
 			const sofa::core::topology::BaseMeshTopology::Triangle& tri = this->m_topology->getTriangle(m_maxPrincipalStressIdx);
 			Index a = tri[0];
