@@ -47,10 +47,21 @@ namespace sofa::component::controller
 	}
 
 	template <class DataTypes>
+	std::pair<typename TearingComponent<DataTypes>::Real, typename TearingComponent<DataTypes>::Deriv> TearingComponent<DataTypes>::principalStressForTriangle(core::topology::BaseMeshTopology::TriangleID tri)
+	{
+		Deriv direction;
+		Real value;
+		// doesn't actually do any fracture stuff
+		sofa::component::forcefield::TriangularFEMForceField<DataTypes>::getFractureCriteria(tri, direction, value);
+		direction.normalize();
+		return { value, direction };
+	}
+
+	template <class DataTypes>
 	typename TearingComponent<DataTypes>::TriangleData TearingComponent<DataTypes>::findCutEndpoint(core::topology::BaseMeshTopology::TriangleID source,
 		Coord maxPrincipalStressDir,
 		const VecCoord& points,
-		bool alongPosX,
+		bool reverse,
 		sofa::type::vector< sofa::core::topology::TopologyElementType>& topoPath_list,
 		sofa::type::vector<Index>& indices_list,
 		sofa::type::vector<Coord>& coords2_list)
@@ -69,173 +80,203 @@ namespace sofa::component::controller
 		sofa::type::vector<Index> indicesList;
 		sofa::type::vector<Coord> coords2List;
 
-		core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(aIndex);
+		core::topology::BaseMeshTopology::TriangleID currTri = source;
 
-		const float planeA = maxPrincipalStressDir[0];
-		const float planeB = maxPrincipalStressDir[1];
-		const float planeC = maxPrincipalStressDir[2];
-		const float planeD = -planeA * aCentroid[0] - planeB * aCentroid[1] - planeC * aCentroid[2];
-		// returns t for intersection of plane and p1 + (p2 - p1) * t
-		const auto planeLineIntersction = [&](Coord p1, Coord p2) {
-			return (-planeA * p1[0] - planeB * p1[1] - planeC * p1[2] - planeD) 
-				/ (planeA * (p2[0] - p1[0]) + planeB * (p2[1] - p1[1]) + planeC * (p2[2] - p1[2]));
-		};
+		Coord currCutPoint = aCentroid;
+		Deriv stressDir = maxPrincipalStressDir;
+		float stressValue = 2.0f;
 
-		// stores all triangles that will be cut
-		sofa::type::vector<core::topology::BaseMeshTopology::TriangleID> incisionIDs = { source };
-		
-		// distance of centroid from source
-		float nextCandidateDistance = 0;
-		core::topology::BaseMeshTopology::TriangleID nextCandidate;
+		while (stressValue > 1.9f) {
 
-		while (nextCandidateDistance < 40.0f) {
-			nextCandidate = sofa::InvalidID;
-			TriangleData lastCutTri(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
-			core::topology::BaseMeshTopology::EdgeID cutEdgeFar = sofa::InvalidID;
-			core::topology::BaseMeshTopology::EdgeID cutEdgeClose = sofa::InvalidID;
-			float cutRatioFar = -1;
-			float cutRatioClose = -1;
+			const float planeA = stressDir[0];
+			const float planeB = stressDir[1];
+			const float planeC = stressDir[2];
+			const float planeD = -planeA * currCutPoint[0] - planeB * currCutPoint[1] - planeC * currCutPoint[2];
+			// returns t for intersection of plane and p1 + (p2 - p1) * t
+			const auto planeLineIntersction = [&](Coord p1, Coord p2) {
+				return (-planeA * p1[0] - planeB * p1[1] - planeC * p1[2] - planeD)
+					/ (planeA * (p2[0] - p1[0]) + planeB * (p2[1] - p1[1]) + planeC * (p2[2] - p1[2]));
+			};
 
-			for (auto&& currID : getAdjacentTriangles(lastCutTri)) {
-				// TODO: process 1 triangle every iteration, this code has 
-				// become extremly convoluted because I didn't realise I
-				// was processing 2 triangles at once
-				// This can be simplifying by just finding an edge that 
-				// intersects the plane and selecting the other triangle
-				// on the edge as the next triangle
-				// 
-				// Since my algortihm advances 2 triangles every iteration,
-				// We calculate 2 edge cuts, this holds the farther one
-				core::topology::BaseMeshTopology::EdgeID toBeCutFar;
-				// This holds the near edge
-				core::topology::BaseMeshTopology::EdgeID toBeCutClose;
-				float toBeCutFarRatio = -1;
-				float toBeCutCloseRatio = -1;
-				TriangleData currTri(currID, points, m_triangleCon);
-				Coord p1 = points[currTri.p1];
-				Coord p2 = points[currTri.p2];
-				Coord p3 = points[currTri.p3];
-				float dist1 = (aCentroid - p1).norm2();
-				float dist2 = (aCentroid - p2).norm2();
-				float dist3 = (aCentroid - p3).norm2();
+			core::topology::BaseMeshTopology::EdgesInTriangle edges = m_triangleCon->getEdgesInTriangle(currTri);
 
-				float t12 = planeLineIntersction(p1, p2);
-				float t23 = planeLineIntersction(p2, p3);
-				float t31 = planeLineIntersction(p3, p1);
+			int lastSize = indices_list.size();
 
-				bool t12Intersection = t12 > 0.0f && t12 < 1.0f;
-				bool t23Intersection = t23 > 0.0f && t23 < 1.0f;
-				bool t31Intersection = t31 > 0.0f && t31 < 1.0f;
-
-				if (!(t12Intersection || t23Intersection || t31Intersection))
-					continue;
-
-				// determine which edge to cut
-				// first we find the edge between current and previous endPoint
-				// as there is no need to consider it
-				// take an assumption that there are no looping cuts i.e. 
-				// out of the adjacent triangles only one is present inincisionIDs
-				// which will always be the last element of incisionIDs
-				core::topology::BaseMeshTopology::TriangleID otherTri12 = getOtherTriangle(currTri, currTri.e12);
-				core::topology::BaseMeshTopology::TriangleID otherTri23 = getOtherTriangle(currTri, currTri.e23);
-				core::topology::BaseMeshTopology::TriangleID otherTri31 = getOtherTriangle(currTri, currTri.e31);
-
-				core::topology::BaseMeshTopology::TriangleID last = incisionIDs[incisionIDs.size() - 1];
-
-				if (otherTri12 == lastCutTri.t) {
-					toBeCutClose = currTri.e12;
-					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
-					if (t23Intersection) {
-						toBeCutFar = currTri.e23;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
-					}
-					else if (t31Intersection) {
-						toBeCutFar = currTri.e31;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
-
-					}
-					else {
-						throw std::exception("Unreachable!");
-					}
-				}
-				else if (otherTri23 == lastCutTri.t) {
-					toBeCutClose = currTri.e23;
-					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
-					if (t31Intersection) {
-						toBeCutFar = currTri.e31;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
-					}
-					else if (t12Intersection) {
-						toBeCutFar = currTri.e12;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
-					}
-					else {
-						throw std::exception("Unreachable!");
-					}
-				}
-				else if (otherTri31 == lastCutTri.t) {
-					toBeCutClose = currTri.e31;
-					toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
-					if (t12Intersection) {
-						toBeCutFar = currTri.e12;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
-					}
-					else if (t23Intersection) {
-						toBeCutFar = currTri.e23;
-						toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
-					}
-					else {
-						throw std::exception("Unreachable!");
-					}
-				}
-				else {
-					throw std::exception("Unreachable!");
-				}
-				
-				core::topology::BaseMeshTopology::TriangleID other = getOtherTriangle(currTri, toBeCutFar);
-				Coord otherCoord[3];
-				m_triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
-				sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
-				float distCentroid = (aCentroid - otherCentroid).norm();
-				float xDiffPos = (aCentroid - otherCentroid).x() > 0;
-				if (distCentroid > nextCandidateDistance && xDiffPos == alongPosX) {
-					nextCandidateDistance = distCentroid;
-					nextCandidate = other;
-					cutEdgeFar = toBeCutFar;
-					cutEdgeClose = toBeCutClose;
-					cutRatioFar = toBeCutFarRatio;
-					cutRatioClose = toBeCutCloseRatio;
-				}
+			if (reverse)
+			{
+				std::reverse(edges.begin(), edges.end());
 			}
-			if (nextCandidate == sofa::InvalidID)
+
+			for (auto&& edge : edges) {
+				if (std::find(indices_list.begin(), indices_list.end(), edge) != indices_list.end())
+				{
+					continue;
+				}
+				Coord p1, p2;
+				p1 = points[m_triangleCon->getEdge(edge)[0]];
+				p2 = points[m_triangleCon->getEdge(edge)[1]];
+				float t = planeLineIntersction(p1, p2);
+				if (t > 1.0f || t < 0.0f)
+				{
+					continue;
+				}
+				currTri = getOtherTriangle(TriangleData(currTri, points, m_triangleCon), edge);
+				topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
+				indices_list.push_back(edge);
+				Coord baryCoords;
+				baryCoords[0] = t;
+				baryCoords[1] = 0.0;
+				baryCoords[2] = 0.0;
+				coords2_list.push_back(baryCoords);
+				currCutPoint = p1 + (p2 - p1) * t;
 				break;
-			incisionIDs.push_back(nextCandidate);
+			}
 
-			topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
-			indices_list.push_back(cutEdgeClose);
-			topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
-			indices_list.push_back(cutEdgeFar);
-			Coord baryCoords;
-			baryCoords[0] = cutRatioClose;
-			baryCoords[1] = 0.0;
-			baryCoords[2] = 0.0;
-			coords2_list.push_back(baryCoords);
-			baryCoords[0] = cutRatioFar;
-			coords2_list.push_back(baryCoords);
+			if (lastSize == indices_list.size())
+			{
+				break;
+			}
+
+			std::tie(stressValue, stressDir) = principalStressForTriangle(currTri);
+
+			//for (auto&& currID : getAdjacentTriangles(lastCutTri)) {
+			//	// TODO: process 1 triangle every iteration, this code has 
+			//	// become extremly convoluted because I didn't realise I
+			//	// was processing 2 triangles at once
+			//	// This can be simplifying by just finding an edge that 
+			//	// intersects the plane and selecting the other triangle
+			//	// on the edge as the next triangle
+			//	// 
+			//	// Since my algortihm advances 2 triangles every iteration,
+			//	// We calculate 2 edge cuts, this holds the farther one
+			//	core::topology::BaseMeshTopology::EdgeID toBeCutFar;
+			//	// This holds the near edge
+			//	core::topology::BaseMeshTopology::EdgeID toBeCutClose;
+			//	float toBeCutFarRatio = -1;
+			//	float toBeCutCloseRatio = -1;
+			//	TriangleData currTri(currID, points, m_triangleCon);
+			//	Coord p1 = points[currTri.p1];
+			//	Coord p2 = points[currTri.p2];
+			//	Coord p3 = points[currTri.p3];
+			//	float dist1 = (aCentroid - p1).norm2();
+			//	float dist2 = (aCentroid - p2).norm2();
+			//	float dist3 = (aCentroid - p3).norm2();
+
+			//	float t12 = planeLineIntersction(p1, p2);
+			//	float t23 = planeLineIntersction(p2, p3);
+			//	float t31 = planeLineIntersction(p3, p1);
+
+			//	bool t12Intersection = t12 > 0.0f && t12 < 1.0f;
+			//	bool t23Intersection = t23 > 0.0f && t23 < 1.0f;
+			//	bool t31Intersection = t31 > 0.0f && t31 < 1.0f;
+
+			//	if (!(t12Intersection || t23Intersection || t31Intersection))
+			//		continue;
+
+			//	// determine which edge to cut
+			//	// first we find the edge between current and previous endPoint
+			//	// as there is no need to consider it
+			//	// take an assumption that there are no looping cuts i.e. 
+			//	// out of the adjacent triangles only one is present inincisionIDs
+			//	// which will always be the last element of incisionIDs
+			//	core::topology::BaseMeshTopology::TriangleID otherTri12 = getOtherTriangle(currTri, currTri.e12);
+			//	core::topology::BaseMeshTopology::TriangleID otherTri23 = getOtherTriangle(currTri, currTri.e23);
+			//	core::topology::BaseMeshTopology::TriangleID otherTri31 = getOtherTriangle(currTri, currTri.e31);
+
+			//	core::topology::BaseMeshTopology::TriangleID last = incisionIDs[incisionIDs.size() - 1];
+
+			//	if (otherTri12 == lastCutTri.t) {
+			//		toBeCutClose = currTri.e12;
+			//		toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
+			//		if (t23Intersection) {
+			//			toBeCutFar = currTri.e23;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
+			//		}
+			//		else if (t31Intersection) {
+			//			toBeCutFar = currTri.e31;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
+
+			//		}
+			//		else {
+			//			throw std::exception("Unreachable!");
+			//		}
+			//	}
+			//	else if (otherTri23 == lastCutTri.t) {
+			//		toBeCutClose = currTri.e23;
+			//		toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
+			//		if (t31Intersection) {
+			//			toBeCutFar = currTri.e31;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
+			//		}
+			//		else if (t12Intersection) {
+			//			toBeCutFar = currTri.e12;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
+			//		}
+			//		else {
+			//			throw std::exception("Unreachable!");
+			//		}
+			//	}
+			//	else if (otherTri31 == lastCutTri.t) {
+			//		toBeCutClose = currTri.e31;
+			//		toBeCutCloseRatio = fixEdgeBarycentricParameter(currTri.e31, currTri.p3, t31);
+			//		if (t12Intersection) {
+			//			toBeCutFar = currTri.e12;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e12, currTri.p1, t12);
+			//		}
+			//		else if (t23Intersection) {
+			//			toBeCutFar = currTri.e23;
+			//			toBeCutFarRatio = fixEdgeBarycentricParameter(currTri.e23, currTri.p2, t23);
+			//		}
+			//		else {
+			//			throw std::exception("Unreachable!");
+			//		}
+			//	}
+			//	else {
+			//		throw std::exception("Unreachable!");
+			//	}
+			//	
+			//	core::topology::BaseMeshTopology::TriangleID other = getOtherTriangle(currTri, toBeCutFar);
+			//	Coord otherCoord[3];
+			//	m_triangleGeo->getTriangleVertexCoordinates(other, otherCoord);
+			//	sofa::type::Vec3 otherCentroid = (otherCoord[0] + otherCoord[1] + otherCoord[2]) / 3.0;
+			//	float distCentroid = (aCentroid - otherCentroid).norm();
+			//	float xDiffPos = (aCentroid - otherCentroid).x() > 0;
+			//	if (distCentroid > nextCandidateDistance && xDiffPos == alongPosX) {
+			//		nextCandidateDistance = distCentroid;
+			//		nextCandidate = other;
+			//		cutEdgeFar = toBeCutFar;
+			//		cutEdgeClose = toBeCutClose;
+			//		cutRatioFar = toBeCutFarRatio;
+			//		cutRatioClose = toBeCutCloseRatio;
+			//	}
+			//}
+			//if (nextCandidate == sofa::InvalidID)
+			//	break;
+			//incisionIDs.push_back(nextCandidate);
+
+			//topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
+			//indices_list.push_back(cutEdgeClose);
+			//topoPath_list.push_back(core::topology::TopologyElementType::EDGE);
+			//indices_list.push_back(cutEdgeFar);
+			//Coord baryCoords;
+			//baryCoords[0] = cutRatioClose;
+			//baryCoords[1] = 0.0;
+			//baryCoords[2] = 0.0;
+			//coords2_list.push_back(baryCoords);
+			//baryCoords[0] = cutRatioFar;
+			//coords2_list.push_back(baryCoords);
 		}
-
+		
 		// End point: centroid of last triangle
-		core::topology::BaseMeshTopology::TriangleID lastTri = incisionIDs[incisionIDs.size() - 1];
 		Coord baryCoords;
 		baryCoords[0] = 1./3;
 		baryCoords[1] = 1./3;
 		baryCoords[2] = 1./3;
 		topoPath_list.push_back(core::topology::TopologyElementType::TRIANGLE);
-		indices_list.push_back(lastTri);
+		indices_list.push_back(currTri);
 		coords2_list.push_back(baryCoords);
 
-		std::cout << nextCandidateDistance << std::endl;
-		return TriangleData(incisionIDs[incisionIDs.size() - 1], points, m_triangleCon);
+		return TriangleData(currTri, points, m_triangleCon);
 	}
 
 	template <class DataTypes>
@@ -256,9 +297,7 @@ namespace sofa::component::controller
         {
 			Deriv direction;
 			Real value;
-			// doesn't actually do any fracture stuff
-			sofa::component::forcefield::TriangularFEMForceField<DataTypes>::getFractureCriteria(i, direction, value);
-			direction.normalize();
+			std::tie(value, direction) = principalStressForTriangle(i);
 			if (value > m_maxPrincipalStress)
 			{
 				m_maxPrincipalStress = value;

@@ -93,6 +93,8 @@ namespace sofa::component::controller
 		float fixEdgeBarycentricParameter(core::topology::BaseMeshTopology::EdgeID edge,
 			core::topology::BaseMeshTopology::PointID p1, float t);
 
+		std::pair<Real, Deriv> principalStressForTriangle(core::topology::BaseMeshTopology::TriangleID tri);
+
 		// finds one end point, need to call this twice to
 		// with true and false along_posX values to get both
 		// end points
